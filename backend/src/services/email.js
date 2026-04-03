@@ -103,10 +103,17 @@ async function sendTicketEmail({ to, name, eventName, qrCodeDataUrl, verifyUrl, 
       });
     }
 
+    // Build subject: use event name if all tickets are for the same event
+    const uniqueEventNames = [...new Set(Object.values(eventNames).map(e => e.name).filter(Boolean))];
+    const subjectEventPart = uniqueEventNames.length === 1
+      ? ` - ${uniqueEventNames[0]}`
+      : '';
+    const ticketWord = tickets.length === 1 ? 'Ticket' : 'Tickets';
+
     return resend.emails.send({
       from: process.env.EMAIL_FROM,
       to: to,
-      subject: `Your Event Tickets (${tickets.length} ${tickets.length === 1 ? 'Ticket' : 'Tickets'})`,
+      subject: `Your ${ticketWord}${subjectEventPart} (${tickets.length} ${ticketWord})`,
       html: `
         <!DOCTYPE html>
         <html>
