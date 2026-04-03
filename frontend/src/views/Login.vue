@@ -5,7 +5,7 @@
         <img :src="logoUrl" alt="Convention Logo" class="convention-logo" />
       </div>
       <h1>{{ conventionName }}</h1>
-      <p class="subtitle">Convention Ticket Manager</p>
+      <p class="subtitle">Event Ticket Manager</p>
       <h2>{{ isRegisterMode ? 'Register' : 'Login' }}</h2>
       
       <form @submit.prevent="handleSubmit">
