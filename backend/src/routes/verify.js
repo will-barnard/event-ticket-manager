@@ -16,7 +16,7 @@ router.get('/:uuid', authMiddleware, checkLockdown, async (req, res) => {
               e.name as event_name, e.event_date, e.location
        FROM tickets t
        LEFT JOIN events e ON t.event_id = e.id
-       WHERE t.uuid = \`,
+       WHERE t.uuid = $1`,
       [uuid]
     );
 
@@ -29,21 +29,39 @@ router.get('/:uuid', authMiddleware, checkLockdown, async (req, res) => {
 
     const ticket = ticketResult.rows[0];
 
-    //     //     //     //     //     //     //     //     //     /      //     //     //     //     //     //   : 'in    //     //     //     //     //    .sta    //     //     //     //     //     //     //  d an    //     //     //     //     //     //     //     s ===    //     //     //     //    s b    //     //     //     //     //     //     //     //     //     /  t     //     //     //     //     //     //     //     //     //     /    e:    //t.    //     //     //     //    s:     //     //     //     //     /      //     //     //     //     //     sc    //     //     //     //     //     //     //     //     //     / et    //     //     //     //     //     //     //     //          //     //     //nC    //     //     //     //     //     //    nnedDate = scanCheckResult.rows[0].scan_date;
+    // Check ticket status
+    if (ticket.status && ticket.status !== 'valid') {
       return res.status(400).json({
-        status: 'already_scanned',
-        messag        messag        mesdy been scanned.',
-        scannedOn: scannedDate,
-                                            : ticket.event_name,
+        status: ticket.status,
+        message: `Ticket is ${ticket.status}.`,
+        name: ticket.name,
+        eventName: ticket.event_name,
       });
     }
-    
+
+    // Check if already scanned
+    const scanCheckResult = await db.query(
+      'SELECT scan_date FROM ticket_scans WHERE ticket_id = $1 LIMIT 1',
+      [ticket.id]
+    );
+
+    if (scanCheckResult.rows.length > 0) {
+      const scannedDate = scanCheckResult.rows[0].scan_date;
+      return res.status(400).json({
+        status: 'already_scanned',
+        message: 'This ticket has already been scanned.',
+        scannedOn: scannedDate,
+        name: ticket.name,
+        eventName: ticket.event_name,
+      });
+    }
+
     // Record the scan
     await db.query(
-      'INSERT INTO ticket_scans (ticket_id, scan_date, scanned_by_user_id) VALUES (\, CURRENT_DATE, \)',
+      'INSERT INTO ticket_scans (ticket_id, scan_date, scanned_by_user_id) VALUES ($1, NOW(), $2)',
       [ticket.id, req.user.id]
     );
-    
+
     return res.json({
       status: 'valid',
       message: 'Access granted',
