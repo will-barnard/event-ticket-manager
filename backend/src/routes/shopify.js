@@ -214,6 +214,7 @@ router.post('/create-ticket', validateApiKey, checkLockdown, async (req, res) =>
 
           createdTickets.push({
             ...ticket,
+            event_name: event.name,
             qrCodeDataUrl,
             verifyUrl
           });

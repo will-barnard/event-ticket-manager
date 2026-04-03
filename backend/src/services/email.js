@@ -67,7 +67,7 @@ async function sendTicketEmail({ to, name, eventName, qrCodeDataUrl, verifyUrl, 
     
     tickets.forEach((ticket, index) => {
       const event = eventNames[ticket.event_id] || {};
-      const ticketLabel = event.name || 'Event Ticket';
+      const ticketLabel = ticket.event_name || event.name || 'Event Ticket';
       
       // Prepare QR code attachment
       const base64Data = ticket.qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
@@ -104,7 +104,7 @@ async function sendTicketEmail({ to, name, eventName, qrCodeDataUrl, verifyUrl, 
     }
 
     // Build subject: use event name if all tickets are for the same event
-    const uniqueEventNames = [...new Set(Object.values(eventNames).map(e => e.name).filter(Boolean))];
+    const uniqueEventNames = [...new Set(tickets.map(t => t.event_name).filter(Boolean))];
     const subjectEventPart = uniqueEventNames.length === 1
       ? ` - ${uniqueEventNames[0]}`
       : '';
