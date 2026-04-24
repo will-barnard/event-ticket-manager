@@ -1,8 +1,6 @@
 const express = require('express');
 const { Resend } = require('resend');
 const db = require('../config/database');
-const fs = require('fs');
-const path = require('path');
 const authMiddleware = require('../middleware/auth');
 const superAdminMiddleware = require('../middleware/superadmin');
 
@@ -160,20 +158,18 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
     // Update rate limit timestamp
     lastSendTimes.set(userId, now);
 
-    // Fetch logo if requested
-    let logoBase64 = null;
+    // Fetch logo URL if requested
+    let logoImgUrl = null;
     let orgName = 'Event';
     if (includeLogo) {
       try {
         const settingsResult = await db.query('SELECT org_name, logo_url FROM settings LIMIT 1');
         if (settingsResult.rows.length > 0) {
           orgName = settingsResult.rows[0].org_name || orgName;
-          const logoUrl = settingsResult.rows[0].logo_url;
-          if (logoUrl) {
-            const logoPath = path.join(__dirname, '../..', logoUrl);
-            if (fs.existsSync(logoPath)) {
-              logoBase64 = fs.readFileSync(logoPath).toString('base64');
-            }
+          const logoPath = settingsResult.rows[0].logo_url;
+          if (logoPath) {
+            const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+            logoImgUrl = `${frontendUrl}${logoPath}`;
           }
         }
       } catch (e) {
@@ -192,9 +188,6 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
     for (const recipient of recipients) {
       try {
         const attachments = [];
-        if (logoBase64) {
-          attachments.push({ filename: 'logo.png', content: logoBase64, content_id: 'logo' });
-        }
 
         await resend.emails.send({
           from: process.env.EMAIL_FROM,
@@ -202,12 +195,11 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
           subject: subject,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              ${logoBase64 ? `<div style="text-align: center; padding: 20px 0; background-color: white;"><img src="cid:logo" alt="${orgName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" /></div>` : ''}
+              ${logoImgUrl ? `<div style="text-align: center; padding: 20px 0; background-color: white;"><img src="${logoImgUrl}" alt="${orgName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" /></div>` : ''}
               ${htmlBody}
               ${showTicketHolder ? `<div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; color: #666; font-size: 12px;"><p>Ticket holder: ${recipient.name}</p></div>` : ''}
             </div>
-          `,
-          attachments: attachments.length > 0 ? attachments : undefined
+          `
         });
         
         // Log successful send
