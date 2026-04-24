@@ -104,6 +104,17 @@
             Tip: Use HTML tags like &lt;strong&gt;, &lt;em&gt;, &lt;p&gt;, &lt;br&gt;, &lt;ul&gt;, &lt;li&gt; for formatting
           </p>
         </div>
+
+        <div class="toggle-options">
+          <label class="toggle-label">
+            <input type="checkbox" v-model="includeLogo" />
+            <span>Include logo banner at top of email</span>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" v-model="showTicketHolder" />
+            <span>Show "Ticket holder: [name]" footer</span>
+          </label>
+        </div>
       </div>
 
       <!-- Test Email -->
@@ -209,6 +220,8 @@ export default {
     const body = ref('');
     const testEmail = ref('');
     const preview = ref(null);
+    const showTicketHolder = ref(true);
+    const includeLogo = ref(false);
     const sendingTest = ref(false);
     const sending = ref(false);
     const testResult = ref(null);
@@ -307,7 +320,9 @@ export default {
         const response = await axios.post('/api/bulk-email/send', {
           subject: subject.value,
           body: body.value,
-          emails
+          emails,
+          showTicketHolder: showTicketHolder.value,
+          includeLogo: includeLogo.value
         });
 
         sendResult.value = {
@@ -320,6 +335,8 @@ export default {
           body.value = '';
           preview.value = null;
           recipients.value = [];
+          showTicketHolder.value = true;
+          includeLogo.value = false;
         }
       } catch (error) {
         console.error('Error sending bulk email:', error);
@@ -362,6 +379,8 @@ export default {
       testResult,
       sendResult,
       showConfirmModal,
+      showTicketHolder,
+      includeLogo,
       canSendTest,
       canSendBulk,
       handleSelectAll,
@@ -676,6 +695,27 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   justify-content: flex-end;
   padding: 1.5rem;
   border-top: 1px solid #e0e0e0;
+}
+
+.toggle-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 
 .recipient-list-box {
