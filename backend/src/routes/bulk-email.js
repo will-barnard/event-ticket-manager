@@ -26,7 +26,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Subject, body, and test email address are required' });
     }
 
-    if (!isEmailConfigured || !transporter) {
+    if (!isEmailConfigured || !resend) {
       return res.status(503).json({ error: 'Email service is not configured' });
     }
 
