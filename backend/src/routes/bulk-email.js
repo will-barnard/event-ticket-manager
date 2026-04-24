@@ -32,6 +32,9 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
       return res.status(503).json({ error: 'Email service is not configured' });
     }
 
+    // Preserve line breaks from the textarea
+    const htmlBody = body.replace(/\n/g, '<br>\n');
+
     // Send test email
     await resend.emails.send({
       from: process.env.EMAIL_FROM,
@@ -42,7 +45,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
           <div style="background: #f44336; color: white; padding: 15px; text-align: center; font-weight: bold; margin-bottom: 20px;">
             🧪 TEST EMAIL - This is a preview
           </div>
-          ${body}
+          ${htmlBody}
           <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; color: #666; font-size: 12px;">
             <p>This is a test email sent from the Bulk Email tool.</p>
             <p>Sent by: ${req.user.name || req.user.email}</p>
@@ -183,6 +186,9 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
     let failedCount = 0;
     const errors = [];
 
+    // Preserve line breaks from the textarea
+    const htmlBody = body.replace(/\n/g, '<br>\n');
+
     for (const recipient of recipients) {
       try {
         const attachments = [];
@@ -197,7 +203,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               ${logoBase64 ? `<div style="text-align: center; padding: 20px 0; background-color: white;"><img src="cid:logo" alt="${orgName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" /></div>` : ''}
-              ${body}
+              ${htmlBody}
               ${showTicketHolder ? `<div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; color: #666; font-size: 12px;"><p>Ticket holder: ${recipient.name}</p></div>` : ''}
             </div>
           `,
