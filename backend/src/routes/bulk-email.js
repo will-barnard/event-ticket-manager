@@ -64,14 +64,17 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
 // Send bulk email
 router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
   try {
-    const { subject, body, eventIds } = req.body;
+    const { subject, body, eventIds, emails } = req.body;
 
     if (!subject || !body) {
       return res.status(400).json({ error: 'Subject and body are required' });
     }
 
-    if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
-      return res.status(400).json({ error: 'At least one event must be selected' });
+    const hasEmails = emails && Array.isArray(emails) && emails.length > 0;
+    const hasEventIds = eventIds && Array.isArray(eventIds) && eventIds.length > 0;
+
+    if (!hasEmails && !hasEventIds) {
+      return res.status(400).json({ error: 'Either emails or eventIds must be provided' });
     }
 
     if (!isEmailConfigured || !resend) {
@@ -90,21 +93,35 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
       });
     }
     
-    // Get tickets based on selected events - only include valid tickets
-    const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(', ');
-    const query = `
-      SELECT DISTINCT t.email, t.name, e.name as event_name
-      FROM tickets t
-      LEFT JOIN events e ON t.event_id = e.id
-      WHERE t.event_id IN (${placeholders})
-      AND t.email IS NOT NULL
-      AND t.email != ''
-      AND (t.status IS NULL OR t.status = 'valid')
-      ORDER BY t.email
-    `;
-
-    const result = await db.query(query, eventIds);
-    const recipients = result.rows;
+    // Get recipients - either from explicit email list or by event
+    let recipients;
+    if (emails && Array.isArray(emails) && emails.length > 0) {
+      const placeholders = emails.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await db.query(
+        `SELECT DISTINCT t.email, t.name, e.name as event_name
+         FROM tickets t
+         LEFT JOIN events e ON t.event_id = e.id
+         WHERE t.email IN (${placeholders})
+         AND (t.status IS NULL OR t.status = 'valid')
+         ORDER BY t.email`,
+        emails
+      );
+      recipients = result.rows;
+    } else {
+      const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await db.query(
+        `SELECT DISTINCT t.email, t.name, e.name as event_name
+         FROM tickets t
+         LEFT JOIN events e ON t.event_id = e.id
+         WHERE t.event_id IN (${placeholders})
+         AND t.email IS NOT NULL
+         AND t.email != ''
+         AND (t.status IS NULL OR t.status = 'valid')
+         ORDER BY t.email`,
+        eventIds
+      );
+      recipients = result.rows;
+    }
 
     if (recipients.length === 0) {
       return res.status(400).json({ error: 'No valid recipients found for selected events' });
@@ -201,6 +218,35 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error sending bulk email:', error);
     res.status(500).json({ error: 'Failed to send bulk email' });
+  }
+});
+
+// Get individual recipient list for selection UI
+router.post('/preview/list', authMiddleware, superAdminMiddleware, async (req, res) => {
+  try {
+    const { eventIds } = req.body;
+
+    if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
+      return res.status(400).json({ error: 'At least one event must be selected' });
+    }
+
+    const placeholders = eventIds.map((_, i) => `$${i + 1}`).join(', ');
+    const result = await db.query(
+      `SELECT DISTINCT t.email, t.name, e.name as event_name
+       FROM tickets t
+       LEFT JOIN events e ON t.event_id = e.id
+       WHERE t.event_id IN (${placeholders})
+       AND t.email IS NOT NULL
+       AND t.email != ''
+       AND (t.status IS NULL OR t.status = 'valid')
+       ORDER BY t.name`,
+      eventIds
+    );
+
+    res.json({ recipients: result.rows });
+  } catch (error) {
+    console.error('Error getting recipient list:', error);
+    res.status(500).json({ error: 'Failed to get recipient list' });
   }
 });
 

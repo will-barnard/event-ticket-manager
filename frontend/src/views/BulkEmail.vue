@@ -57,6 +57,26 @@
             </div>
           </div>
         </div>
+
+        <!-- Individual recipient list -->
+        <div v-if="recipients.length > 0" class="recipient-list-box">
+          <div class="recipient-list-header">
+            <h3>👥 Select Recipients <span class="selected-count">({{ selectedRecipientCount }} of {{ recipients.length }} selected)</span></h3>
+            <div class="recipient-list-actions">
+              <button @click="selectAllRecipients" class="btn-link">Select All</button>
+              <span class="divider">|</span>
+              <button @click="deselectAllRecipients" class="btn-link">Deselect All</button>
+            </div>
+          </div>
+          <div class="recipient-list">
+            <label v-for="r in recipients" :key="r.email" class="recipient-row">
+              <input type="checkbox" v-model="r.selected" />
+              <span class="recipient-name">{{ r.name }}</span>
+              <span class="recipient-email">{{ r.email }}</span>
+              <span class="recipient-event">{{ r.event_name }}</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <!-- Email Composition -->
@@ -149,7 +169,7 @@
           <button @click="showConfirmModal = false" class="btn-close">×</button>
         </div>
         <div class="modal-body">
-          <p><strong>You are about to send this email to {{ preview?.total || 0 }} recipients.</strong></p>
+          <p><strong>You are about to send this email to {{ selectedRecipientCount }} recipient(s).</strong></p>
           <p>Subject: <em>{{ subject }}</em></p>
           <p>This action cannot be undone. Are you sure you want to continue?</p>
         </div>
@@ -184,6 +204,7 @@ export default {
     const events = ref([]);
     const selectAll = ref(false);
     const selectedEventIds = ref([]);
+    const recipients = ref([]);
     const subject = ref('');
     const body = ref('');
     const testEmail = ref('');
@@ -194,12 +215,14 @@ export default {
     const sendResult = ref(null);
     const showConfirmModal = ref(false);
 
+    const selectedRecipientCount = computed(() => recipients.value.filter(r => r.selected).length);
+
     const canSendTest = computed(() => {
       return subject.value.trim() && body.value.trim() && testEmail.value.trim();
     });
 
     const canSendBulk = computed(() => {
-      return subject.value.trim() && body.value.trim() && (selectedEventIds.value.length > 0 || selectAll.value) && preview.value;
+      return subject.value.trim() && body.value.trim() && selectedRecipientCount.value > 0;
     });
 
     const loadEvents = async () => {
@@ -218,19 +241,30 @@ export default {
         selectedEventIds.value = [];
       }
       preview.value = null;
+      recipients.value = [];
     };
 
     const loadPreview = async () => {
       try {
         const eventIds = selectAll.value ? events.value.map(e => e.id) : selectedEventIds.value;
-        const response = await axios.post('/api/bulk-email/preview', {
-          eventIds
-        });
-        preview.value = response.data;
+        const [countRes, listRes] = await Promise.all([
+          axios.post('/api/bulk-email/preview', { eventIds }),
+          axios.post('/api/bulk-email/preview/list', { eventIds })
+        ]);
+        preview.value = countRes.data;
+        recipients.value = listRes.data.recipients.map(r => ({ ...r, selected: true }));
       } catch (error) {
         console.error('Error loading preview:', error);
         alert('Failed to load recipient preview');
       }
+    };
+
+    const selectAllRecipients = () => {
+      recipients.value.forEach(r => r.selected = true);
+    };
+
+    const deselectAllRecipients = () => {
+      recipients.value.forEach(r => r.selected = false);
     };
 
     const sendTestEmail = async () => {
@@ -269,11 +303,11 @@ export default {
       sendResult.value = null;
 
       try {
-        const eventIds = selectAll.value ? events.value.map(e => e.id) : selectedEventIds.value;
+        const emails = recipients.value.filter(r => r.selected).map(r => r.email);
         const response = await axios.post('/api/bulk-email/send', {
           subject: subject.value,
           body: body.value,
-          eventIds
+          emails
         });
 
         sendResult.value = {
@@ -285,6 +319,7 @@ export default {
           subject.value = '';
           body.value = '';
           preview.value = null;
+          recipients.value = [];
         }
       } catch (error) {
         console.error('Error sending bulk email:', error);
@@ -316,6 +351,8 @@ export default {
       events,
       selectAll,
       selectedEventIds,
+      recipients,
+      selectedRecipientCount,
       subject,
       body,
       testEmail,
@@ -329,6 +366,8 @@ export default {
       canSendBulk,
       handleSelectAll,
       loadPreview,
+      selectAllRecipients,
+      deselectAllRecipients,
       sendTestEmail,
       confirmSend,
       sendBulkEmail,
@@ -639,10 +678,113 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border-top: 1px solid #e0e0e0;
 }
 
+.recipient-list-box {
+  margin-top: 1.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.recipient-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.recipient-list-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.selected-count {
+  font-weight: normal;
+  color: #667eea;
+  font-size: 0.9rem;
+}
+
+.recipient-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #667eea;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.btn-link:hover { color: #5a67d8; }
+
+.divider { color: #ccc; font-size: 0.85rem; }
+
+.recipient-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.recipient-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1.5fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.recipient-row:last-child { border-bottom: none; }
+.recipient-row:hover { background: #f8f9fa; }
+
+.recipient-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.recipient-name {
+  font-weight: 500;
+  color: #333;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipient-email {
+  color: #666;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipient-event {
+  color: #999;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  text-align: right;
+}
+
 @media (max-width: 768px) {
   .container { padding: 15px; }
   .section { padding: 1.5rem; }
   .nav-tabs { overflow-x: auto; scrollbar-width: none; }
   .nav-tabs::-webkit-scrollbar { display: none; }
+  .recipient-row { grid-template-columns: auto 1fr 1fr; }
+  .recipient-event { display: none; }
 }
 </style>
