@@ -168,7 +168,7 @@ router.post('/send', authMiddleware, superAdminMiddleware, async (req, res) => {
           orgName = settingsResult.rows[0].org_name || orgName;
           const logoPath = settingsResult.rows[0].logo_url;
           if (logoPath) {
-            const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+            const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '').replace(/^http:\/\//, 'https://');
             logoImgUrl = `${frontendUrl}${logoPath}`;
           }
         }
