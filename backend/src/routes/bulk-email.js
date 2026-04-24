@@ -20,7 +20,7 @@ if (isEmailConfigured) {
 // Send test email
 router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
   try {
-    const { subject, body, testEmail } = req.body;
+    const { subject, body, testEmail, includeLogo = false } = req.body;
 
     if (!subject || !body || !testEmail) {
       return res.status(400).json({ error: 'Subject, body, and test email address are required' });
@@ -28,6 +28,25 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
 
     if (!isEmailConfigured || !resend) {
       return res.status(503).json({ error: 'Email service is not configured' });
+    }
+
+    // Resolve logo URL if requested
+    let logoImgUrl = null;
+    let orgName = 'Event';
+    if (includeLogo) {
+      try {
+        const settingsResult = await db.query('SELECT org_name, logo_url FROM settings LIMIT 1');
+        if (settingsResult.rows.length > 0) {
+          orgName = settingsResult.rows[0].org_name || orgName;
+          const logoPath = settingsResult.rows[0].logo_url;
+          if (logoPath) {
+            const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '').replace(/^http:\/\//, 'https://');
+            logoImgUrl = `${frontendUrl}${logoPath}`;
+          }
+        }
+      } catch (e) {
+        console.log('Note: Could not fetch logo for test email');
+      }
     }
 
     // Preserve line breaks from the textarea
@@ -43,6 +62,7 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
           <div style="background: #f44336; color: white; padding: 15px; text-align: center; font-weight: bold; margin-bottom: 20px;">
             🧪 TEST EMAIL - This is a preview
           </div>
+          ${logoImgUrl ? `<div style="text-align: center; padding: 20px 0; background-color: white;"><img src="${logoImgUrl}" alt="${orgName}" style="max-width: 100%; max-height: 150px; object-fit: contain;" /></div>` : ''}
           ${htmlBody}
           <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; color: #666; font-size: 12px;">
             <p>This is a test email sent from the Bulk Email tool.</p>
@@ -53,10 +73,12 @@ router.post('/test', authMiddleware, superAdminMiddleware, async (req, res) => {
     });
 
     console.log(`📧 Test email sent to ${testEmail} by ${req.user.email}`);
+    if (logoImgUrl) console.log(`   Logo URL used: ${logoImgUrl}`);
 
     res.json({
       success: true,
-      message: `Test email sent to ${testEmail}`
+      message: `Test email sent to ${testEmail}`,
+      logoUrl: logoImgUrl || null
     });
   } catch (error) {
     console.error('Error sending test email:', error);

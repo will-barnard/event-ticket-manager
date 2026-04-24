@@ -288,12 +288,14 @@ export default {
         const response = await axios.post('/api/bulk-email/test', {
           subject: subject.value,
           body: body.value,
-          testEmail: testEmail.value
+          testEmail: testEmail.value,
+          includeLogo: includeLogo.value
         });
 
+        const logoNote = response.data.logoUrl ? ` (logo: ${response.data.logoUrl})` : '';
         testResult.value = {
           type: 'success',
-          message: response.data.message
+          message: response.data.message + logoNote
         };
       } catch (error) {
         console.error('Error sending test email:', error);
