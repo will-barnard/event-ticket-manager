@@ -63,7 +63,7 @@
           <button @click="loadTickets" class="btn-secondary">
             Refresh
           </button>
-          <span class="ticket-count-label">{{ filteredTickets.length }} tickets</span>
+          <span class="ticket-count-label">{{ visibleTicketCount }} tickets</span>
         </div>
 
         <div class="tickets-table">
@@ -128,9 +128,17 @@
                 </tr>
 
                 <template v-if="isOrderExpanded(group.orderId)">
-                  <tr v-for="ticket in group.tickets" :key="ticket.id" class="ticket-row">
+                  <tr
+                    v-for="ticket in group.tickets"
+                    :key="ticket.id"
+                    class="ticket-row"
+                    :class="{ 'archived-row': ticket.event_archived }"
+                  >
                     <td>
                       <span class="badge event-badge">{{ ticket.event_name || 'Unknown' }}</span>
+                      <span v-if="ticket.event_archived" class="badge archived-event-badge" title="This event has been archived">
+                        Archived event
+                      </span>
                     </td>
                     <td>{{ ticket.name }}</td>
                     <td>
@@ -339,7 +347,7 @@ export default {
 
     const groupedTickets = computed(() => {
       const groups = {};
-      
+
       filteredTickets.value.forEach(ticket => {
         const orderId = ticket.shopify_order_id || ('manual-' + ticket.id);
         if (!groups[orderId]) {
@@ -353,13 +361,26 @@ export default {
         }
         groups[orderId].tickets.push(ticket);
       });
-      
-      return Object.values(groups).sort((a, b) => {
+
+      // Hide orders whose tickets are ALL from archived events.
+      // Mixed orders (some archived, some not) stay visible — archived
+      // ticket rows will be greyed out via the .archived-row CSS class.
+      const visible = Object.values(groups).filter(group =>
+        group.tickets.some(t => !t.event_archived)
+      );
+
+      return visible.sort((a, b) => {
         const aDate = new Date(a.tickets[0].created_at);
         const bDate = new Date(b.tickets[0].created_at);
         return bDate - aDate;
       });
     });
+
+    // Count tickets that are actually rendered (excludes tickets in
+    // fully-archived orders that we hide above).
+    const visibleTicketCount = computed(() =>
+      groupedTickets.value.reduce((sum, g) => sum + g.tickets.length, 0)
+    );
 
     const toggleOrder = (orderId) => {
       if (expandedOrders.value.has(orderId)) {
@@ -588,6 +609,7 @@ export default {
       saving,
       filteredTickets,
       groupedTickets,
+      visibleTicketCount,
       loadTickets,
       deleteTicket,
       updateTicketStatus,
@@ -782,6 +804,29 @@ td {
 }
 
 .ticket-row:hover { background: #f8f9fa; }
+
+.ticket-row.archived-row {
+  background: #f5f5f5;
+  color: #888;
+}
+
+.ticket-row.archived-row:hover { background: #eeeeee; }
+
+.ticket-row.archived-row td {
+  font-style: italic;
+}
+
+.ticket-row.archived-row .badge.event-badge {
+  opacity: 0.65;
+}
+
+.archived-event-badge {
+  background: #eceff1;
+  color: #546e7a;
+  font-size: 0.7rem;
+  margin-left: 6px;
+  font-style: normal;
+}
 
 .order-header {
   display: flex;

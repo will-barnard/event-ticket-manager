@@ -15,7 +15,8 @@ router.get('/', authMiddleware, async (req, res) => {
   try {
     const ticketsResult = await db.query(
       `SELECT t.id, t.event_id, t.name, t.email, t.uuid, t.is_used, t.email_sent, t.status, t.shopify_order_id, t.created_at,
-              e.name as event_name
+              e.name as event_name,
+              e.archived as event_archived
        FROM tickets t
        LEFT JOIN events e ON t.event_id = e.id
        ORDER BY t.created_at DESC`
