@@ -51,15 +51,39 @@ async function runMigrations() {
         location VARCHAR(255),
         sku VARCHAR(255) UNIQUE,
         active BOOLEAN DEFAULT TRUE,
+        archived BOOLEAN DEFAULT FALSE,
+        archived_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     console.log('✓ Events table created');
 
+    // Add archived columns if upgrading from old schema
+    await db.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'events' AND column_name = 'archived'
+        ) THEN
+          ALTER TABLE events ADD COLUMN archived BOOLEAN DEFAULT FALSE;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'events' AND column_name = 'archived_at'
+        ) THEN
+          ALTER TABLE events ADD COLUMN archived_at TIMESTAMP;
+        END IF;
+      END $$;
+    `);
+    console.log('✓ Events archived columns ensured');
+
     await db.query(`CREATE INDEX IF NOT EXISTS idx_events_sku ON events(sku)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_events_active ON events(active)`);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_events_date ON events(event_date)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_events_archived ON events(archived)`);
     console.log('✓ Events indexes created');
 
     // Create tickets table (single type: attendee, linked to events)

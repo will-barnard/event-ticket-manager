@@ -13,7 +13,8 @@ router.get('/:uuid', authMiddleware, checkLockdown, async (req, res) => {
     // Find ticket with event info
     const ticketResult = await db.query(
       `SELECT t.id, t.name, t.email, t.is_used, t.status, t.event_id,
-              e.name as event_name, e.event_date, e.location
+              e.name as event_name, e.event_date, e.location,
+              e.archived as event_archived
        FROM tickets t
        LEFT JOIN events e ON t.event_id = e.id
        WHERE t.uuid = $1`,
@@ -28,6 +29,16 @@ router.get('/:uuid', authMiddleware, checkLockdown, async (req, res) => {
     }
 
     const ticket = ticketResult.rows[0];
+
+    // Reject scans for archived events
+    if (ticket.event_archived) {
+      return res.status(400).json({
+        status: 'archived',
+        message: 'This event has been archived. Tickets cannot be scanned.',
+        name: ticket.name,
+        eventName: ticket.event_name,
+      });
+    }
 
     // Check ticket status
     if (ticket.status && ticket.status !== 'valid') {

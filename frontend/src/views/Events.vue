@@ -17,7 +17,13 @@
 
       <div class="page-header">
         <h2>Events</h2>
-        <button @click="openCreateModal" class="btn-primary">+ New Event</button>
+        <div class="page-header-actions">
+          <label class="show-archived-toggle">
+            <input v-model="showArchived" type="checkbox" @change="loadEvents" />
+            Show archived
+          </label>
+          <button @click="openCreateModal" class="btn-primary">+ New Event</button>
+        </div>
       </div>
 
       <div v-if="loading" class="loading">Loading events...</div>
@@ -28,11 +34,17 @@
           <p>No events yet. Create your first event to get started.</p>
         </div>
 
-        <div v-for="event in events" :key="event.id" class="event-card" :class="{ inactive: !event.active }">
+        <div
+          v-for="event in events"
+          :key="event.id"
+          class="event-card"
+          :class="{ inactive: !event.active, archived: event.archived }"
+        >
           <div class="event-info">
             <div class="event-header">
               <h3>{{ event.name }}</h3>
-              <span class="badge" :class="event.active ? 'active' : 'inactive'">
+              <span v-if="event.archived" class="badge archived-badge">Archived</span>
+              <span v-else class="badge" :class="event.active ? 'active' : 'inactive'">
                 {{ event.active ? 'Active' : 'Inactive' }}
               </span>
             </div>
@@ -42,6 +54,9 @@
               <span v-if="event.event_time"><strong>Time:</strong> {{ event.event_time }}</span>
               <span v-if="event.location"><strong>Location:</strong> {{ event.location }}</span>
               <span><strong>SKU:</strong> {{ event.sku }}</span>
+              <span v-if="event.archived && event.archived_at">
+                <strong>Archived:</strong> {{ formatDate(event.archived_at) }}
+              </span>
             </div>
             <div class="event-stats">
               <span class="stat">{{ event.ticket_count || 0 }} tickets</span>
@@ -49,8 +64,30 @@
             </div>
           </div>
           <div class="event-actions">
-            <button @click="openEditModal(event)" class="btn-small">Edit</button>
-            <button @click="deleteEvent(event)" class="btn-small btn-danger" :disabled="event.ticket_count > 0">Delete</button>
+            <button @click="openEditModal(event)" class="btn-small" :disabled="event.archived">Edit</button>
+            <button
+              v-if="!event.archived"
+              @click="archiveEvent(event)"
+              class="btn-small"
+              title="Hide this event from the dashboard and stats. Tickets become unscannable."
+            >
+              Archive
+            </button>
+            <button
+              v-else
+              @click="unarchiveEvent(event)"
+              class="btn-small"
+              title="Restore this event to the dashboard."
+            >
+              Unarchive
+            </button>
+            <button
+              @click="deleteEvent(event)"
+              class="btn-small btn-danger"
+              :disabled="event.ticket_count > 0"
+            >
+              Delete
+            </button>
           </div>
         </div>
       </div>
@@ -130,6 +167,7 @@ export default {
     const editingEvent = ref(null);
     const saving = ref(false);
     const modalError = ref('');
+    const showArchived = ref(false);
 
     const form = reactive({
       name: '',
@@ -155,7 +193,8 @@ export default {
     const loadEvents = async () => {
       loading.value = true;
       try {
-        const response = await axios.get('/api/events');
+        const params = showArchived.value ? { include_archived: 'true' } : {};
+        const response = await axios.get('/api/events', { params });
         events.value = response.data;
       } catch (err) {
         error.value = 'Failed to load events';
@@ -220,6 +259,26 @@ export default {
       }
     };
 
+    const archiveEvent = async (event) => {
+      const msg = `Archive "${event.name}"? It will be hidden from the dashboard and stats, and its tickets will no longer be scannable. You can unarchive it later.`;
+      if (!confirm(msg)) return;
+      try {
+        await axios.post(`/api/events/${event.id}/archive`);
+        await loadEvents();
+      } catch (err) {
+        alert(err.response?.data?.error || 'Failed to archive event');
+      }
+    };
+
+    const unarchiveEvent = async (event) => {
+      try {
+        await axios.post(`/api/events/${event.id}/unarchive`);
+        await loadEvents();
+      } catch (err) {
+        alert(err.response?.data?.error || 'Failed to unarchive event');
+      }
+    };
+
     const formatDate = (dateStr) => {
       if (!dateStr) return '';
       return new Date(dateStr).toLocaleDateString();
@@ -235,8 +294,9 @@ export default {
 
     return {
       authStore, events, loading, error, isChangePasswordOpen, showModal,
-      editingEvent, saving, modalError, form,
+      editingEvent, saving, modalError, form, showArchived,
       openCreateModal, openEditModal, closeModal, saveEvent, deleteEvent,
+      archiveEvent, unarchiveEvent, loadEvents,
       formatDate, showChangePassword, handleLogout
     };
   }
@@ -253,6 +313,9 @@ export default {
 
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .page-header h2 { margin: 0; color: #333; font-size: 28px; }
+.page-header-actions { display: flex; align-items: center; gap: 16px; }
+.show-archived-toggle { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #555; cursor: pointer; user-select: none; }
+.show-archived-toggle input { width: auto; cursor: pointer; }
 
 .events-list { display: flex; flex-direction: column; gap: 16px; }
 .empty-state { text-align: center; padding: 60px 20px; color: #888; background: white; border-radius: 12px; }
@@ -265,6 +328,7 @@ export default {
 }
 .event-card:hover { transform: translateY(-1px); }
 .event-card.inactive { opacity: 0.7; }
+.event-card.archived { opacity: 0.6; background: #fafafa; border-left: 4px solid #999; }
 
 .event-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .event-header h3 { margin: 0; color: #333; }
@@ -277,6 +341,7 @@ export default {
 .badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
 .badge.active { background: #e8f5e9; color: #2e7d32; }
 .badge.inactive { background: #fce4ec; color: #c62828; }
+.badge.archived-badge { background: #eceff1; color: #546e7a; }
 
 .event-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .btn-small { padding: 8px 16px; border: 1px solid #ddd; border-radius: 6px; background: white; cursor: pointer; font-size: 13px; transition: background 0.2s; }

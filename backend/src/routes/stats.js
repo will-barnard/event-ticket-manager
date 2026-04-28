@@ -7,11 +7,15 @@ const router = express.Router();
 // Get ticket statistics grouped by event
 router.get('/', authMiddleware, async (req, res) => {
   try {
+    // Exclude tickets whose event has been archived (archived events
+    // shouldn't appear on the dashboard). Tickets with no event_id are
+    // still included via the LEFT JOIN (e.archived IS NULL).
     const ticketsResult = await db.query(
       `SELECT t.id, t.event_id, t.shopify_order_id, e.name as event_name, e.event_date
        FROM tickets t
        LEFT JOIN events e ON t.event_id = e.id
-       WHERE t.status IS NULL OR t.status = 'valid'`
+       WHERE (t.status IS NULL OR t.status = 'valid')
+         AND (e.archived IS NULL OR e.archived = false)`
     );
     const tickets = ticketsResult.rows;
 

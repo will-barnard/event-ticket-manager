@@ -6,13 +6,17 @@ const authMiddleware = require('../middleware/auth');
 const router = express.Router();
 
 // Get all events (protected)
+// By default, archived events are hidden. Pass ?include_archived=true to include them.
 router.get('/', authMiddleware, async (req, res) => {
   try {
+    const includeArchived = req.query.include_archived === 'true';
+    const whereClause = includeArchived ? '' : 'WHERE (e.archived IS NULL OR e.archived = false)';
     const result = await db.query(
-      `SELECT e.*, 
+      `SELECT e.*,
         (SELECT COUNT(*) FROM tickets t WHERE t.event_id = e.id AND (t.status IS NULL OR t.status = 'valid')) as ticket_count,
         (SELECT COUNT(*) FROM ticket_scans ts JOIN tickets t ON ts.ticket_id = t.id WHERE t.event_id = e.id) as checkin_count
-       FROM events e 
+       FROM events e
+       ${whereClause}
        ORDER BY e.event_date DESC, e.created_at DESC`
     );
     res.json(result.rows);
@@ -154,11 +158,56 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 router.get('/list/active', authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT id, name, event_date, sku FROM events WHERE active = true ORDER BY event_date ASC'
+      `SELECT id, name, event_date, sku FROM events
+       WHERE active = true
+         AND (archived IS NULL OR archived = false)
+       ORDER BY event_date ASC`
     );
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching active events:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Archive an event (protected)
+router.post('/:id/archive', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      `UPDATE events
+       SET archived = true, archived_at = NOW(), updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error archiving event:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Unarchive an event (protected)
+router.post('/:id/unarchive', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.query(
+      `UPDATE events
+       SET archived = false, archived_at = NULL, updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error unarchiving event:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
